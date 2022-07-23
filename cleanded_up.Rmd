@@ -23,6 +23,7 @@ Now, the idea is to recycle those data but redirecting the focus on Bcells. In p
 ```{r}
 renv::activate()
 renv::restore()
+renv::snapshot()
 #install.packages("Seurat")
 #install.packages("remotes")
 #remotes::install_github("carmonalab/UCell")
