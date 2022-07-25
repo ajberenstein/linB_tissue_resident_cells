@@ -663,6 +663,13 @@ write.table(data.wt$SCT_snn_res.0.8,paste0(markers_folder,"/clusters_wt_200vfeat
 ```
 
 
+
+```{r}
+saveRDS(data.wt,file = paste0(dataset_folder,"/data.wt_sct200vf.rds"))
+saveRDS(data.im,file = paste0(dataset_folder,"/data.im_sct200vf.rds"))
+```
+
+
 ## #############################
 # Marker analysis
 
