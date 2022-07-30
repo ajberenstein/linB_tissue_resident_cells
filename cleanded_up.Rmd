@@ -53,7 +53,8 @@ count_files <- paste(path,samples,"gene_exon_tagged_dge.txt.gz",sep = "/")
 # Output files:
 qmin = 0.2
 qmax = 0.9
-res_folder = paste0("./results/","res",qmin,"_",qmax)
+n_var_feat = 800
+res_folder = paste0("./results/","resQ_",qmin,"_",qmax,"_Nfeat",n_var_feat)
 dataset_folder = paste0(res_folder,"/datasets")
 plot_folder = paste0(res_folder,"/plots")
 markers_folder = paste0(res_folder,"/markers")
@@ -211,7 +212,7 @@ if(run) seurat.merged.processed <- process_obj(seurat.filtered.merged,ndim = ndi
 DimPlot(seurat.merged.processed,,split.by = "orig.ident")
 ```
 
-# 7275 cells  (4926 at 20%-90%)
+# 4926 at 20%-90%
 # 18.886 features 
 ```{r}
 seurat.merged.processed
@@ -413,7 +414,7 @@ if(run){
 # Load Bcell-filtered dataset
 ```{r,warning=F, collapse =T,message =F}
 ndim = 20; seed = 31416
-sct_nFeatures <- 200 
+sct_nFeatures <- 800
 
 data <- readRDS(panBcellFile)
 data%>%dim
@@ -422,6 +423,7 @@ data.bkp <- data
 data.wt <- data%>%subset(orig.ident == "DS-017-WT")
 data.im <- data%>%subset(orig.ident != "DS-017-WT")
 ```
+
 Visualize datasets by condition
 ```{r,fig.width=6,fig.height=3,warning=F, collapse =T,message =F}
 fig2 <- DimPlot(data,group.by = "orig.ident",split.by = "orig.ident")
@@ -455,12 +457,12 @@ g2m.genes <- cc.genes$g2m.genes%>%hs.2.mm(.)
 set.seed(seed)
 data.wt <- CellCycleScoring(data.wt, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
 data.wt$CC.Difference <- data.wt$S.Score - data.wt$G2M.Score
-data.wt <- SCTransform(data.wt, method = "glmGamPoi", vars.to.regress = c("percent.mito","CC.Difference"), verbose = FALSE, variable.features.n = sct_nFeatures)
+
+data.wt <- SCTransform(data.wt, method = "glmGamPoi", vars.to.regress = c("percent.mito","CC.Difference"), verbose = FALSE, variable.features.n = sct_nFeatures, return.only.var.genes = FALSE)
 
 data.wt <- RunPCA(data.wt, features = data.wt@assays$SCT@var.features,
                 ndims.print = 1:5, nfeatures.print = 5)
 data.wt <- RunUMAP(data.wt, reduction = "pca", dims = 1:ndim, seed.use=seed, n.neighbors = 20)
-
 ```
 
 
@@ -473,12 +475,11 @@ data.im <- CellCycleScoring(data.im, s.features = s.genes, g2m.features = g2m.ge
 data.im$CC.Difference <- data.im$S.Score - data.im$G2M.Score
 
 # work as usual (only variable genes)
-data.im <- SCTransform(data.im, method = "glmGamPoi", vars.to.regress = c("percent.mito","CC.Difference"), verbose = FALSE,
-                       variable.features.n = sct_nFeatures)
+data.im <- SCTransform(data.im, method = "glmGamPoi", vars.to.regress = c("percent.mito","CC.Difference"), verbose = FALSE,variable.features.n = sct_nFeatures, return.only.var.genes = FALSE)
+
 data.im <- RunPCA(data.im, features = data.im@assays$SCT@var.features,
                 ndims.print = 1:5, nfeatures.print = 5)
 data.im <- RunUMAP(data.im, reduction = "pca", dims = 1:ndim, seed.use=seed, n.neighbors = 20)
-
 ```
 
 
@@ -513,7 +514,10 @@ data.wt <- FindClusters(data.wt, resolution = 0.65)
 data.wt <- FindClusters(data.wt, resolution = 0.5)
 data.wt <- FindClusters(data.wt, resolution = 0.4)
 data.wt <- FindClusters(data.wt, resolution = 0.3)
+```
 
+
+```{r,fig.height=4, fig.width= 10,warning=F, collapse =T,message =F, results='hide'}
 Fig3a <- DimPlot(data.wt,group.by = "SCT_snn_res.0.8",label = T)
 Fig3b <- DimPlot(data.im ,group.by = "SCT_snn_res.0.4",label = T)
 
@@ -536,7 +540,6 @@ ggsave(paste0(plot_folder,"/Fig3.pdf"),plot = Fig3,width = 9, height = 4)
 ggsave(paste0(plot_folder,"/Fig3.png"),plot = Fig3,width = 9, height = 4)
 ggsave(paste0(plot_folder,"/Fig3.tiff"),plot = Fig3,width = 9, height = 4)
 
-Fig3
 #FeaturePlot(data.im,features = c("nCount_RNA","nFeature_RNA"))  ## Visualizo para ver que no hay sesgo en los counts ó nFeatures
 
 ```
@@ -585,21 +588,7 @@ if(run){
 
 ## Clean singleR # by filtering out predicted categories with less than ~1% cells
 ```{r,fig.width= 10,fig.height=4}
-#im
-test <- data.im
-a <- test$SingleR.term%>%table()
-categories_ok <- names(a[a>20])
-categories_ok
-
-clean.classif <- test$SingleR.term
-clean.classif[!clean.classif%in%categories_ok] <- ""
-
-test$SingleR.term <- clean.classif
-SFig2a <- DimPlot(test%>%subset(SingleR.term != "NaN"),group.by = "SingleR.term")
-a <- test@meta.data[,c("SCT_snn_res.0.4","SingleR.term")]
-a%>%table()
-
-
+#wt
 test <- data.wt
 a <- test$SingleR.term%>%table()
 categories_ok <- names(a[a>10])
@@ -609,52 +598,33 @@ clean.classif <- test$SingleR.term
 clean.classif[!clean.classif%in%categories_ok] <- NaN
 
 test$SingleR.term <- clean.classif
-SFig2b <- DimPlot(test%>%subset(SingleR.term != "NaN"),group.by = "SingleR.term")
+SFig2a <- DimPlot(test%>%subset(SingleR.term != "NaN"),group.by = "SingleR.term")
 a <- test@meta.data[,c("SCT_snn_res.0.8","SingleR.term")]
-a%>%table()
+
+
+#im
+test <- data.im
+a <- test$SingleR.term%>%table()
+categories_ok <- names(a[a>20])
+categories_ok
+
+clean.classif <- test$SingleR.term
+clean.classif[!clean.classif%in%categories_ok] <- NaN
+
+test$SingleR.term <- clean.classif
+SFig2b <- DimPlot(test%>%subset(SingleR.term != "NaN"),group.by = "SingleR.term")
+a <- test@meta.data[,c("SCT_snn_res.0.4","SingleR.term")]
+
+
 
 SFigSR <- SFig2a + SFig2b
 SFigSR
-ggsave(paste0(plot_folder,"/SFigSR.pdf"),plot = SFigSR,width = 7, height = 7)
-ggsave(paste0(plot_folder,"/SFigSR.png"),plot = SFigSR,width = 7, height = 7)
-ggsave(paste0(plot_folder,"/SFigSR.tiff"),plot = SFigSR,width = 7, height = 7)
+ggsave(paste0(plot_folder,"/SFigSR.pdf"),plot = SFigSR,width = 14, height = 7)
+ggsave(paste0(plot_folder,"/SFigSR.png"),plot = SFigSR,width = 14, height = 7)
+ggsave(paste0(plot_folder,"/SFigSR.tiff"),plot = SFigSR,width = 14, height = 7)
 
 ```
 
-
-
-# relation ids old and new clusters (Para que a Caro se le haga más fácil reinterpretar)
-```{r}
-if(F){
-  test <- data.im
-  original_clustes = read.table("~/Dropbox/Amezcua/tissue_resident_cells/reports/old_im_clusters_0_to_7.tsv")
-  colnames(original_clustes) <- c("id","old_SCT_snn_res.0.4")
-  
-  im_clusters <- test@meta.data%>%select("SCT_snn_res.0.4")
-  im_clusters$id <- im_clusters%>%rownames()
-  
-  im_clusters = merge(im_clusters,original_clustes,by.x = "id",by.y = "id",all.x = F,all.y =F)
-  
-  
-  relation_ids_im = table(im_clusters$SCT_snn_res.0.4,im_clusters$old_SCT_snn_res.0.4)
-  write.table(relation_ids_im,paste0(markers_folder,"/cluster_relation_ids_old_new_UMAPs.tsv"),quote = F)
-  
-  
-  test <- data.wt
-  original_clustes = read.table("~/Dropbox/Amezcua/tissue_resident_cells/reports/old_wt_clusters_0_to_3.tsv")
-  colnames(original_clustes) <- c("id","old_SCT_snn_res.0.8")
-  
-  wt_clusters <- test@meta.data%>%select("SCT_snn_res.0.8")
-  wt_clusters$id <- wt_clusters%>%rownames()
-  
-  wt_clusters = merge(wt_clusters,original_clustes,by.x = "id",by.y = "id",all.x = F,all.y =F)
-  
-  
-  relation_ids_wt = table(wt_clusters$SCT_snn_res.0.8,wt_clusters$old_SCT_snn_res.0.8)
-  relation_ids_wt
-  write.table(relation_ids_wt,paste0(markers_folder,"/wt_cluster_relation_ids_old_new_UMAPs.tsv"),quote = F)
-}
-```
 
 ## Write cluster ids to disk
 ```{r}
@@ -663,22 +633,29 @@ write.table(data.wt$SCT_snn_res.0.8,paste0(markers_folder,"/clusters_wt_200vfeat
 ```
 
 
+```{r}
+saveRDS(data.wt,file = paste0(dataset_folder,"/data.wt.rds"))
+saveRDS(data.im,file = paste0(dataset_folder,"/data.im.rds"))
+```
 
 ```{r}
-saveRDS(data.wt,file = paste0(dataset_folder,"/data.wt_sct200vf.rds"))
-saveRDS(data.im,file = paste0(dataset_folder,"/data.im_sct200vf.rds"))
+if(!run){
+data.wt <- readRDS(paste0(dataset_folder,"/data.wt.rds"))
+data.im <- readRDS(paste0(dataset_folder,"/data.im.rds"))
+}
 ```
 
 
 ## #############################
 # Marker analysis
 
-```{r,fig.height= 10,fig.width=7,warning=F, collapse =T,message =F}
+```{r,fig.height= 13,fig.width=7,warning=F, collapse =T,message =F}
 Idents(data.wt) <- "SCT_snn_res.0.8"
+
 discrim.wt <- FindAllMarkers(data.wt, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.15)
 discrim.wt <- discrim.wt%>%subset(p_val_adj < 0.05)
 gene.wt <- discrim.wt$gene
-d <- DoHeatmap(data.wt,features = gene.wt)
+Fig4 <- DoHeatmap(data.wt,features = gene.wt)
 
 Idents(data.im) <- "SCT_snn_res.0.4"
 discrim.im <- FindAllMarkers(data.im,assay = "SCT", only.pos = TRUE, min.pct = 0.25,logfc.threshold = 0.15)
@@ -687,28 +664,48 @@ discrim.im <- discrim.im%>%subset(p_val_adj < 0.05)
 
 gene.im <- discrim.im$gene
 
-e <- DoHeatmap(data.im,features = gene.im,size = 3,lines.width = 35)
+Fig5a <- DoHeatmap(data.im,features = gene.im,size = 3,lines.width = 35)   # all clusters
+```
 
-# show WT heatmap
-d 
+## Remove cluster 5 in IM population (17 cells) (according to Carolina's inspection criteria)
+```{r,fig.height= 13,fig.width=7,warning=F, collapse =T,message =F}
+data.im.filt5 <- subset(data.im,SCT_snn_res.0.4!=5)
+Idents(data.im.filt5) <- "SCT_snn_res.0.4"
+discrim.im.filt5 <- FindAllMarkers(data.im.filt5,assay = "SCT", only.pos = TRUE, min.pct = 0.25,logfc.threshold = 0.15)
+discrim.im.filt5.uncorrected <- discrim.im.filt5
+discrim.im.filt5 <- discrim.im.filt5%>%subset(p_val_adj < 0.05)
 
-# show IM heatmap
-e 
+gene.im.filt5 <- discrim.im.filt5$gene
+
+Fig5b <- DoHeatmap(data.im.filt5,features = gene.im.filt5,size = 3,lines.width = 35)
 ```
 
 
-```{r,eval = F}
-ggsave(d,file = paste0(markers_folder,"/heatmap_fdr005.wt.png"),height = 20,width = 10, dpi = 300)
-ggsave(d,file = paste0(markers_folder,"/heatmap_fdr005.wt.tiff"),height = 20,width = 10, dpi = 300)
-ggsave(d,file = paste0(markers_folder,"/heatmap_fdr005.wt.pdf"),height = 20,width = 10,dpi = 300)
+```{r,fig.height= 7,fig.width=4,warning=F, collapse =T,message =F}
+# show WT heatmap
+Fig4
+ggsave(Fig4,file = paste0(plot_folder,"/Fig4_heatmap_fdr005.wt.png"),height = 7,width = 4, dpi = 300)
+ggsave(Fig4,file = paste0(plot_folder,"/Fig4_heatmap_fdr005.wt.tiff"),height = 7,width = 4, dpi = 300)
+ggsave(Fig4,file = paste0(plot_folder,"/Fig4_heatmap_fdr005.wt.pdf"),height = 7,width = 4,dpi = 300)
 write.table(discrim.wt, file = paste0(markers_folder,"/markers_fdr005.wt.tsv"),sep = "\t",quote =F,row.names =F)
 
-ggsave(e,file = paste0(markers_folder,"/heatmap_fdr005.im.png"),height = 20,width = 10,dpi = 300)
-ggsave(e,file = paste0(markers_folder,"/heatmap_fdr005.im.tiff"),height = 20,width = 10,dpi = 300)
-ggsave(e,file = paste0(markers_folder,"/heatmap_fdr005.im.pdf"),height = 20,width = 10,dpi = 300)
-write.table(discrim.im,file = paste0(markers_folder,"/markers_fdr005.im.tsv"),sep = "\t",quote =F,row.names =F)
 ```
 
+
+```{r,fig.height= 15,fig.width=9,warning=F, collapse =T,message =F}
+# show IM heatmap
+Fig5a 
+Fig5b 
+ggsave(Fig5a,file = paste0(plot_folder,"/Fig5a_heatmap_fdr005.im.png"),height = 15,width = 9,dpi = 300)
+ggsave(Fig5a,file = paste0(plot_folder,"/Fig5a_heatmap_fdr005.im.tiff"),height = 15,width = 9,dpi = 300)
+ggsave(Fig5a,file = paste0(plot_folder,"/Fig5a_heatmap_fdr005.im.pdf"),height = 15,width = 9,dpi = 300)
+
+ggsave(Fig5b,file = paste0(plot_folder,"/Fig5b_heatmap_fdr005.im.png"),height = 15,width = 9,dpi = 300)
+ggsave(Fig5b,file = paste0(plot_folder,"/Fig5b_heatmap_fdr005.im.tiff"),height = 15,width = 9,dpi = 300)
+ggsave(Fig5b,file = paste0(plot_folder,"/Figba_heatmap_fdr005.im.pdf"),height = 15,width = 9,dpi = 300)
+
+write.table(discrim.im,file = paste0(markers_folder,"/markers_fdr005.im.tsv"),sep = "\t",quote =F,row.names =F)
+```
 
 ```{r,eval = F}
 # 
