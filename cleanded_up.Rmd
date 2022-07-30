@@ -414,7 +414,7 @@ if(run){
 # Load Bcell-filtered dataset
 ```{r,warning=F, collapse =T,message =F}
 ndim = 20; seed = 31416
-sct_nFeatures <- 800
+sct_nFeatures <- n_var_feat
 
 data <- readRDS(panBcellFile)
 data%>%dim
