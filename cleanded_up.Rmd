@@ -72,7 +72,7 @@ dir.create(markers_folder,recursive = T)
 ```{r}
 if(file.exists(panBcellFile)){
   run =F
-  seurat.merged.processed <- seurat.pan.Bcells <- readRDS(panBellFile)  
+  seurat.merged.processed <- seurat.pan.Bcells <- readRDS(panBcellFile)  
 }else{
   run =T
 }
